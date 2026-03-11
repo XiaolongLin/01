@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>物流后台中心（前端原型）</title>
+  <style>
+    :root { font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif; color-scheme: light; }
+    body { margin: 0; background: #f5f7fb; color: #1f2937; }
+    .topbar { position: sticky; top: 0; background: #0f172a; color: #fff; padding: 12px 20px; display:flex; gap:10px; flex-wrap:wrap; }
+    .tab { border: 1px solid #334155; background: #1e293b; color: #cbd5e1; padding: 8px 12px; border-radius: 8px; cursor: pointer; }
+    .tab.active { background: #2563eb; color:#fff; border-color:#2563eb; }
+    .layout { display:grid; grid-template-columns: 360px 1fr; gap:16px; padding:16px; }
+    .card { background:#fff; border-radius:12px; box-shadow:0 2px 10px rgba(15,23,42,.08); overflow:hidden; }
+    .card h3 { margin:0; padding:14px 16px; border-bottom:1px solid #e5e7eb; font-size:16px; }
+    .list { padding:8px; max-height: calc(100vh - 140px); overflow:auto; }
+    .item { padding:12px; border-radius:10px; cursor:pointer; border:1px solid #e5e7eb; margin:8px; background:#fff; }
+    .item.active { border-color:#2563eb; background:#eff6ff; }
+    .detail { padding: 16px; display:grid; gap:10px; }
+    .grid2 { display:grid; grid-template-columns: repeat(2,minmax(200px,1fr)); gap:10px; }
+    .kv { background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:10px; }
+    .muted { color:#64748b; font-size:12px; }
+    table { width:100%; border-collapse: collapse; font-size: 14px; }
+    th, td { padding:8px; border-bottom:1px solid #e5e7eb; text-align:left; }
+  </style>
+</head>
+<body>
+  <nav class="topbar" id="tabs"></nav>
+  <main class="layout">
+    <section class="card">
+      <h3 id="listTitle">列表页</h3>
+      <div class="list" id="list"></div>
+    </section>
+    <section class="card">
+      <h3 id="detailTitle">详情页（中心视图）</h3>
+      <div class="detail" id="detail"></div>
+    </section>
+  </main>
+
+  <script>
+    const state = {
+      orders: [
+        { id:1001, supplier:'金穗面粉场', customer:'华北饲料厂', tons:35, driver:'王师傅', plate:'豫A-12345', date:'2026-03-10', status:'运输中', timeline:['已创建','已装车发运','运输中'], freight:[4200,2000], purchase:[111300,60000], sales:[122500,50000] },
+        { id:1002, supplier:'丰收面粉场', customer:'顺兴饲料厂', tons:32, driver:'李师傅', plate:'豫B-88991', date:'2026-03-06', status:'已签收', timeline:['已创建','运输中','已签收'], freight:[3900,3900], purchase:[100800,100800], sales:[110400,110400] }
+      ],
+      drivers:[
+        { id:1,name:'王师傅',phone:'13800000001',plate:'豫A-12345',capacity:35,note:'路线熟、夜间可跑' },
+        { id:2,name:'李师傅',phone:'13800000002',plate:'豫B-88991',capacity:32,note:'月底结算' }
+      ],
+      customers:[
+        { id:101,name:'华北饲料厂',contact:'刘经理',address:'郑州高新区',term:'30天 / 30万' },
+        { id:102,name:'顺兴饲料厂',contact:'张主管',address:'新乡牧野区',term:'20天 / 18万' }
+      ],
+      suppliers:[
+        { id:201,name:'金穗面粉场',contact:'赵总',address:'开封工业园',price:'3180/吨' },
+        { id:202,name:'丰收面粉场',contact:'何总',address:'安阳开发区',price:'3150/吨' }
+      ],
+      ledger:[
+        { date:'2026-03-07',type:'收款',target:'客户#102',order:1002,amount:110400,note:'订单1002货款',voucher:'收据-2301' },
+        { date:'2026-03-08',type:'付款',target:'供应商#202',order:1002,amount:100800,note:'订单1002采购款',voucher:'回单-3302' },
+        { date:'2026-03-09',type:'运费付款',target:'司机#1',order:1001,amount:2000,note:'订单1001预付运费',voucher:'运费凭证-771' }
+      ]
+    };
+
+    const modules = [
+      { key:'orders', label:'订单' },
+      { key:'drivers', label:'司机' },
+      { key:'customers', label:'饲料厂（客户）' },
+      { key:'suppliers', label:'面粉场（供应商）' },
+      { key:'finance', label:'资金' },
+    ];
+
+    let current = { module:'orders', idx:0 };
+
+    function renderTabs(){
+      tabs.innerHTML = modules.map(m=>`<button class="tab ${m.key===current.module?'active':''}" data-key="${m.key}">${m.label}</button>`).join('');
+      tabs.querySelectorAll('button').forEach(btn=>btn.onclick=()=>{ current={module:btn.dataset.key,idx:0}; render(); });
+    }
+
+    function renderList(){
+      listTitle.textContent = `${modules.find(m=>m.key===current.module).label} · 列表页`;
+      const data = state[current.module];
+      if(current.module==='finance'){ list.innerHTML = '<div class="item active">资金总览 + 流水台账</div>'; return; }
+      list.innerHTML = data.map((x,i)=>`<div class="item ${i===current.idx?'active':''}" data-i="${i}">${x.name || ('订单#'+x.id)}<div class="muted">ID: ${x.id}</div></div>`).join('');
+      list.querySelectorAll('.item').forEach(el=>el.onclick=()=>{ current.idx=Number(el.dataset.i); renderDetail(); renderList(); });
+    }
+
+    function moneyTriplet(arr){ return `应付/应收 ${arr[0]} · 已付/已收 ${arr[1]} · 未结 ${arr[0]-arr[1]}`; }
+
+    function renderDetail(){
+      detailTitle.textContent = `${modules.find(m=>m.key===current.module).label} · 详情页（中心视图）`;
+      if(current.module==='orders'){
+        const o = state.orders[current.idx];
+        detail.innerHTML = `
+          <div class="grid2">
+            <div class="kv"><b>基本信息</b><br/>${o.supplier} → ${o.customer}<br/>吨数 ${o.tons}，司机 ${o.driver}，车牌 ${o.plate}，日期 ${o.date}</div>
+            <div class="kv"><b>状态</b><br/>${o.status}<br/><span class="muted">时间线：${o.timeline.join(' → ')}</span></div>
+            <div class="kv"><b>运费</b><br/>${moneyTriplet(o.freight)}</div>
+            <div class="kv"><b>采购款</b><br/>${moneyTriplet(o.purchase)}</div>
+            <div class="kv"><b>销售款</b><br/>${moneyTriplet(o.sales)}</div>
+            <div class="kv"><b>附件</b><br/>回单/磅单（第二阶段）</div>
+          </div>`;
+      } else if(current.module==='drivers'){
+        const d = state.drivers[current.idx];
+        const orders = state.orders.filter(o=>o.driver===d.name);
+        const payable = orders.reduce((s,o)=>s+o.freight[0],0), paid = orders.reduce((s,o)=>s+o.freight[1],0);
+        detail.innerHTML = `<div class="kv"><b>司机信息</b><br/>电话 ${d.phone}，车牌 ${d.plate}，吨位 ${d.capacity}，备注 ${d.note}</div>
+          <div class="kv"><b>历史合作订单（本月/近3月）</b><br/>${orders.map(o=>`订单#${o.id} ${o.date}`).join('<br/>')||'无'}</div>
+          <div class="kv"><b>运费结算汇总</b><br/>总应付 ${payable}，已付 ${paid}，未结 ${payable-paid}</div>
+          <div class="kv"><b>当前进行中订单</b><br/>${orders.filter(o=>o.status==='运输中').map(o=>'订单#'+o.id).join('，')||'无'}</div>`;
+      } else if(current.module==='customers'){
+        const c = state.customers[current.idx];
+        const orders = state.orders.filter(o=>o.customer===c.name);
+        const recv = orders.reduce((s,o)=>s+o.sales[0],0), recved = orders.reduce((s,o)=>s+o.sales[1],0);
+        detail.innerHTML = `<div class="kv"><b>客户基本信息</b><br/>联系人 ${c.contact}，地址 ${c.address}，账期/信用额度 ${c.term}</div>
+          <div class="kv"><b>订单列表</b><br/>${orders.map(o=>`订单#${o.id} ${o.date} ${o.status}`).join('<br/>')||'无'}</div>
+          <div class="kv"><b>应收账款</b><br/>应收总额 ${recv}，已收 ${recved}，未收 ${recv-recved}，逾期 0</div>
+          <div class="kv"><b>最近一次发货/收款</b><br/>发货 ${orders[0]?.date||'-'}，收款 -</div>
+          <div class="kv"><b>常用司机/常用面粉场</b><br/>王师傅 / 金穗面粉场（历史统计）</div>`;
+      } else if(current.module==='suppliers'){
+        const s = state.suppliers[current.idx];
+        const orders = state.orders.filter(o=>o.supplier===s.name);
+        const pay = orders.reduce((sum,o)=>sum+o.purchase[0],0), paid = orders.reduce((sum,o)=>sum+o.purchase[1],0);
+        detail.innerHTML = `<div class="kv"><b>供应商基本信息</b><br/>联系人 ${s.contact}，地址 ${s.address}，常见采购价 ${s.price}</div>
+          <div class="kv"><b>采购订单列表</b><br/>${orders.map(o=>`订单#${o.id} ${o.date} ${o.status}`).join('<br/>')||'无'}</div>
+          <div class="kv"><b>应付账款</b><br/>应付总额 ${pay}，已付 ${paid}，未付 ${pay-paid}，逾期 0</div>
+          <div class="kv"><b>最近一次采购/付款</b><br/>采购 ${orders[0]?.date||'-'}，付款 -</div>
+          <div class="kv"><b>常配套客户</b><br/>华北饲料厂（历史统计）</div>`;
+      } else {
+        const recv = state.orders.reduce((s,o)=>s+o.sales[0],0), recved = state.orders.reduce((s,o)=>s+o.sales[1],0);
+        const pay = state.orders.reduce((s,o)=>s+o.purchase[0]+o.freight[0],0), paid = state.orders.reduce((s,o)=>s+o.purchase[1]+o.freight[1],0);
+        detail.innerHTML = `<div class="grid2">
+            <div class="kv"><b>资金总览（Dashboard）</b><br/>本月应收/已收/未收：${recv}/${recved}/${recv-recved}<br/>本月应付/已付/未付：${pay}/${paid}/${pay-paid}<br/>本月毛利：${recv-pay}<br/>逾期应收/应付：0/0<br/>未结运费总额：${state.orders.reduce((s,o)=>s+(o.freight[0]-o.freight[1]),0)}</div>
+            <div class="kv"><b>资金流水（Ledger）</b>
+              <table><thead><tr><th>日期</th><th>类型</th><th>对象</th><th>订单</th><th>金额</th><th>备注/凭证</th></tr></thead>
+              <tbody>${state.ledger.map(e=>`<tr><td>${e.date}</td><td>${e.type}</td><td>${e.target}</td><td>${e.order}</td><td>${e.amount}</td><td>${e.note}(${e.voucher})</td></tr>`).join('')}</tbody></table>
+            </div>
+          </div>`;
+      }
+    }
+
+    function render(){ renderTabs(); renderList(); renderDetail(); }
+    render();
+  </script>
+</body>
+</html>
